@@ -1,0 +1,7 @@
+obj/
+bin/
+bak/
+*.obj
+*.o
+*.bak
+*.exe
