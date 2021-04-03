@@ -1,0 +1,1 @@
+Switch-off Monitor On screen Lock (SMOL)
