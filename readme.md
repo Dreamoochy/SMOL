@@ -24,6 +24,9 @@ A little utility that switches off monitor when Windows session is locked
 
 Run **build.cmd** for the appropriate version (masm32 or gcc-cpp)
 
+**Rust**
+* Use `cargo build`
+
 ---
 
 ### Supported Operating Systems
