@@ -7,7 +7,7 @@ A little utility that switches off monitor when Windows session is locked
 ### How To Use
 
 * Execute app
-* Lock session (e.g. via Win+L) - now monitor should be switched off
+* Lock session (e.g. via Win+L) - now monitor should be switched off[^1]
 * Terminate app by executing it once again
 
 ---
@@ -27,4 +27,6 @@ Run **build.cmd** for the appropriate version (masm32 or gcc-cpp)
 ---
 
 ### Supported Operating Systems
-MS Windows is the only supported OS. Tested on 32-bit edition.
+MS Windows is the only supported OS. Tested on 32-bit and 64-bit edition.
+
+[^1] On Windows 10+ session lock != screen lock. The session considered locked when password box becomes visible.
