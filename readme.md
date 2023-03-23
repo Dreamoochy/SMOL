@@ -29,4 +29,4 @@ Run **build.cmd** for the appropriate version (masm32 or gcc-cpp)
 ### Supported Operating Systems
 MS Windows is the only supported OS. Tested on 32-bit and 64-bit edition.
 
-[^1] On Windows 10+ session lock != screen lock. The session considered locked when password box becomes visible.
+[^1]: On Windows 10+ session lock != screen lock. The session considered locked when password box becomes visible.
