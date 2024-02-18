@@ -1,10 +1,5 @@
 #define _WIN32_WINNT 0x0501
 
-typedef enum _WTS_VIRTUAL_CLASS {
-  WTSVirtualClientData,
-  WTSVirtualFileHandle
-} WTS_VIRTUAL_CLASS;
-
 #include <windows.h>
 #include <winbase.h>
 #include <wtsapi32.h>
@@ -153,33 +148,28 @@ LRESULT CALLBACK WindowProcedure( HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
   {
     case WM_CREATE:
     {
-      // set startup timer
-      SetTimer( hwnd, IDT_START_TIMER, 1000, &StartTimerProcedure );
+      if ( !WTSRegisterSessionNotification( hwnd, NOTIFY_FOR_ALL_SESSIONS ) )
+      {
+        PostQuitMessage(0);
+      }
       break;
     }
     case WM_DESTROY:
     {
       // unregister session change notifications receiving
       WTSUnRegisterSessionNotification( hwnd );
-      // send a WM_QUIT to the message queue
+
       PostQuitMessage( 0 );
       break;
     }
     case WM_WTSSESSION_CHANGE:
     {
-      if ( WTSGetActiveConsoleSessionId() != hSessID )
-        break;
-
       if ( wParam == WTS_SESSION_LOCK )
       {
-        // check if session is to be locked
-        SetTimer( hwnd, IDT_LOCK_TIMER, 500, &WaitTimerProcedure );
+        SendMessage( HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, MONITOR_OFF );
       }
       else if ( wParam == WTS_SESSION_UNLOCK )
       {
-        // disable session lock check timer
-        KillTimer( hwnd, IDT_LOCK_TIMER );
-
         // manually wake up monitor to be sure it is on
         SendMessage( HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, MONITOR_ON );
       }
@@ -193,43 +183,3 @@ LRESULT CALLBACK WindowProcedure( HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
   return 0;
 };
-
-/* Timer procedure for checking session lock state */
-VOID CALLBACK WaitTimerProcedure( HWND hwnd, UINT uMsg, UINT_PTR idEvend, DWORD dwTime )
-{
-  // try to open current input desktop
-  HDESK hDesktop = OpenDesktop( (LPSTR)(szDesktopName), 0, false, DESKTOP_SWITCHDESKTOP );
-
-  if ( hDesktop )
-  {
-    if ( !SwitchDesktop( hDesktop ) )
-    {
-      // disable session lock check timer
-      KillTimer( hwnd, IDT_LOCK_TIMER );
-      // most probably workstation is locked now, so try to power off monitor
-      SendMessage( HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, MONITOR_OFF );
-    }
-    CloseDesktop( hDesktop );
-  }
-
-  return;
-}
-
-/* Timer procedure for correct start */
-VOID CALLBACK StartTimerProcedure( HWND hwnd, UINT uMsg, UINT_PTR idEvend, DWORD dwTime )
-{
-  static int nRetries = EVENT_WAIT_RETRIES;
-
-  if ( WTSRegisterSessionNotification( hwnd, NOTIFY_FOR_ALL_SESSIONS ) )
-  {
-    // disable start timer
-    KillTimer( hwnd, IDT_START_TIMER );
-    ProcessIdToSessionId( GetCurrentProcessId(), &hSessID );
-  }
-  else if ( !--nRetries )
-  {
-    PostQuitMessage( nRetries );
-  }
-
-  return;
-}

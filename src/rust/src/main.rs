@@ -8,7 +8,6 @@ use windows::{
   Win32::System::LibraryLoader::*, //GetModuleHandleW,
   Win32::System::Memory::*, //{CreateFileMappingW, MapViewOfFile, UnmapViewOfFile, FILE_MAP_ALL_ACCESS, PAGE_READWRITE},
   Win32::System::RemoteDesktop::*, //{ProcessIdToSessionId, WTSRegisterSessionNotification, WTSUnRegisterSessionNotification, NOTIFY_FOR_ALL_SESSIONS},
-  Win32::System::StationsAndDesktops::*, //{CloseDesktop, OpenDesktopW, SwitchDesktop, DESKTOP_CONTROL_FLAGS, DESKTOP_SWITCHDESKTOP },
   Win32::System::Threading::*, //{GetCurrentProcess, GetCurrentProcessId, SetPriorityClass, HIGH_PRIORITY_CLASS},
   Win32::UI::WindowsAndMessaging::*, //{CreateWindowExW, RegisterClassExW, ShowWindow, DispatchMessageW, GetMessageW, TranslateMessage, DefWindowProcW, SendMessageW, SetWindowLongW, SetTimer,  GetWindowLongW, KillTimer, PostQuitMessage, GWL_USERDATA, WNDCLASSEXW, SC_MONITORPOWER, WM_SYSCOMMAND, MSG, WM_CLOSE, WM_CREATE, WM_DESTROY, WTS_SESSION_LOCK, WTS_SESSION_UNLOCK, WM_WTSSESSION_CHANGE, HMENU, HICON, HCURSOR, SW_HIDE, CW_USEDEFAULT, CS_BYTEALIGNWINDOW, CS_VREDRAW, CS_HREDRAW, WS_OVERLAPPEDWINDOW, WS_EX_LEFT},
 };
@@ -17,14 +16,10 @@ use std::mem::size_of;
 //const MONITOR_LOW       : isize =  1;
 const MONITOR_OFF       : isize =  2;
 const MONITOR_ON        : isize = -1;
-const IDT_LOCK_TIMER    : usize =  1;
-const IDT_START_TIMER   : usize =  2;
-const EVENT_WAIT_RETRIES: i32   =  300;
 
 const WND_CLASS_NAME: PCWSTR = w!("clSMOL");
 const PROGRAM_TITLE : PCWSTR = w!("Switch-off Monitor On Lock");
 const MAP_FILENAME  : PCWSTR = w!("Local\\SMOL_MAP_FILE");
-const DESKTOP_NAME  : PCWSTR = w!("Default");
 const HWND_BROADCAST: HWND   = HWND(0xFFFF);
 
 struct MapData {
@@ -212,7 +207,9 @@ unsafe extern "system" fn window_procedure( hwnd: HWND, msg: u32, w_param: WPARA
     WM_CREATE =>
     {
       // set startup timer
-      SetTimer( hwnd, IDT_START_TIMER, 1000, Some(start_timer_procedure) );
+      if ( !WTSRegisterSessionNotification( hwnd, NOTIFY_FOR_ALL_SESSIONS ).as_bool() ) {
+        PostQuitMessage(0);
+      }
     },
     WM_DESTROY =>
     {
@@ -223,23 +220,15 @@ unsafe extern "system" fn window_procedure( hwnd: HWND, msg: u32, w_param: WPARA
     },
     WM_WTSSESSION_CHANGE => 
     {
-      let session_id = GetWindowLongW( hwnd, GWL_USERDATA ) as isize;
-
-      if ( l_param == LPARAM(session_id) ) {
-        if ( w_param == WPARAM(WTS_SESSION_LOCK as usize) )
-        {
-          // check if session is to be locked
-          SetTimer( hwnd, IDT_LOCK_TIMER, 500, Some(wait_timer_procedure) );
-        }
-        else if ( w_param == WPARAM(WTS_SESSION_UNLOCK as usize) )
-        {
-          // disable session lock check timer
-          KillTimer( hwnd, IDT_LOCK_TIMER );
-
-          // manually wake up monitor to be sure it is on
-          SendMessageW( HWND_BROADCAST, WM_SYSCOMMAND, WPARAM(SC_MONITORPOWER as usize), LPARAM(MONITOR_ON) );
-        }
-      }  
+      if ( w_param == WPARAM(WTS_SESSION_LOCK as usize) )
+      {
+        SendMessageW( HWND_BROADCAST, WM_SYSCOMMAND, WPARAM(SC_MONITORPOWER as usize), LPARAM(MONITOR_OFF) );
+      }
+      else if ( w_param == WPARAM(WTS_SESSION_UNLOCK as usize) )
+      {
+        // manually wake up monitor to be sure it is on
+        SendMessageW( HWND_BROADCAST, WM_SYSCOMMAND, WPARAM(SC_MONITORPOWER as usize), LPARAM(MONITOR_ON) );
+      }
     }
     _ =>
       // for messages that we don't deal with
@@ -247,48 +236,4 @@ unsafe extern "system" fn window_procedure( hwnd: HWND, msg: u32, w_param: WPARA
   }
 
   return LRESULT(0);
-}
-
-/* Timer procedure for correct start */
-unsafe extern "system" fn start_timer_procedure(hwnd: HWND, _msg: u32, _event_id: usize, _time: u32) {
-  static NUM_RETRIES: i32 = EVENT_WAIT_RETRIES;
-
-  let mut result = WTSRegisterSessionNotification( hwnd, NOTIFY_FOR_ALL_SESSIONS ).as_bool();
-
-  if ( result )
-  {
-    let mut session_id: u32 = u32::default();
-    result = ProcessIdToSessionId( GetCurrentProcessId(), &mut session_id ).as_bool();
-
-    if ( result ) {
-      result = ( SetWindowLongW( hwnd, GWL_USERDATA, session_id as i32 ) != 0 );
-    }
-  }
-
-  if ( result ) {
-    // disable start timer
-    KillTimer( hwnd, IDT_START_TIMER );
-  }
-  else if ( --NUM_RETRIES < 1 )
-  {
-    PostQuitMessage( NUM_RETRIES );
-  }
-}
-
-/* Timer procedure for checking session lock state */
-unsafe extern "system" fn wait_timer_procedure( hwnd: HWND, _msg: u32, _event_id: usize, _time: u32 ) {
-  // try to open current input desktop
-  let desktop_handle = OpenDesktopW( DESKTOP_NAME, DESKTOP_CONTROL_FLAGS(0), false, DESKTOP_SWITCHDESKTOP.0 );
-
-  if let Ok(handle) = desktop_handle {
-    if ( !SwitchDesktop( handle ).as_bool() )
-    {
-      // disable session lock check timer
-      KillTimer( hwnd, IDT_LOCK_TIMER );
-      // most probably workstation is locked now, so try to power off monitor
-      SendMessageW( HWND_BROADCAST, WM_SYSCOMMAND, WPARAM(SC_MONITORPOWER as usize), LPARAM(MONITOR_OFF) );
-    }
-
-    CloseDesktop(handle);
-  }
 }
