@@ -197,23 +197,16 @@ WndProc proc  hwnd: DWORD, uMsg: DWORD, wParam: DWORD, lParam: DWORD
     ;-------------;
 
   .elseif ( uMsg == WM_CREATE )
-    ; enable startup timer
-    mov     eax, EVENT_WAIT_RETRIES
-    mov     dRetries, eax
-    invoke  SetTimer, hwnd, IDT_STARTUP_TIMER, 1000, ADDR StartupTimerProc
-
-  .elseif ( uMsg == WM_WTSSESSION_CHANGE )
-    invoke  WTSGetActiveConsoleSessionId
-    xor     eax, hSessID
+    invoke  WTSRegisterSessionNotification, hwnd, NOTIFY_FOR_ALL_SESSIONS
+    or      eax, eax
     jnz     l_wpp_exit
-
+    invoke  PostQuitMessage, eax
+    
+  .elseif ( uMsg == WM_WTSSESSION_CHANGE )
     .if ( wParam == WTS_SESSION_LOCK )
-      ; check if session is to be locked
-      invoke  SetTimer, hwnd, IDT_LOCK_TIMER, 500, ADDR MonitorTimerProc
+      ; most probably workstation is locked now, so try to suspend monitor
+      invoke  SendMessage, HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, MONITOR_OFF  
     .elseif ( wParam == WTS_SESSION_UNLOCK )
-      ; disable session lock check timer
-      invoke  KillTimer, hwnd, IDT_LOCK_TIMER
-
       ; manually wake up monitor to be sure it is on
       invoke  SendMessage, HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, MONITOR_ON
     .endif
@@ -226,68 +219,8 @@ l_wpp_exit:
   xor     eax, eax
   ret
 WndProc endp
-;
-;----------------------------------------
-;
-MonitorTimerProc proc  hwnd: HWND, message: UINT, idTimer: UINT, dwTime: DWORD
-  ; try to open current input desktop
-  xor     eax,  eax
-  invoke  OpenDesktop, ADDR szDesktopName, eax, eax, DESKTOP_SWITCHDESKTOP
-  
-  or      eax, eax
-  ; exit if failed
-  jz      l_mtp_exit
-
-  push    eax
-  invoke  SwitchDesktop, eax
-  
-  or      eax, eax
-  ; close desktop and exit if failed
-  jnz     l_mtp_close_desk
-
-  ; disable session lock check timer
-  invoke  KillTimer, hwnd, IDT_LOCK_TIMER
-
-  ; most probably workstation is locked now, so try to suspend monitor
-  invoke  SendMessage, HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, MONITOR_OFF  
-
-l_mtp_close_desk:
-  ; close desktop and exit
-  pop     eax
-  invoke  CloseDesktop, eax
- 
-l_mtp_exit:  
-  ret
-MonitorTimerProc endp
-;
-;----------------------------------------
-;
-StartupTimerProc proc  hwnd: HWND, message: UINT, idTimer: UINT, dwTime: DWORD
-  invoke  WTSRegisterSessionNotification, hwnd, NOTIFY_FOR_ALL_SESSIONS
-  or      eax, eax
-  jz      l_stp_retry
-
-  ; disable startup timer
-  invoke  KillTimer, hwnd, IDT_STARTUP_TIMER
-  invoke  GetCurrentProcessId
-  invoke  ProcessIdToSessionId, eax, ADDR hSessID
-  ret
-
-l_stp_retry:
-  mov     eax, dRetries
-  dec     eax
-  or      eax, eax
-  jnz     l_stp_exit
-
-  invoke  PostQuitMessage, eax
-
-l_stp_exit:
-  mov     dRetries, eax
-  ret
-StartupTimerProc endp
 
 end start
-
 ;---------;
 ; The End ;
 ;---------;

@@ -42,19 +42,14 @@ MONITOR_LOW             equ 1
 MONITOR_OFF             equ 2
 NOTIFY_FOR_THIS_SESSION equ 0
 NOTIFY_FOR_ALL_SESSIONS equ 1
-IDT_LOCK_TIMER          equ 1
-IDT_STARTUP_TIMER       equ 2
-EVENT_WAIT_RETRIES      equ 300
 
 .data
 szWndClassName  db "clSMOL", 0
 szProgramTitle  db "Switch-off Monitor On session Lock", 0
 szMapFileName   db "Local\SMOL_MAP_FILE", 0
-szDesktopName   db "Default", 0
 hMainWnd        DWORD 0
  
 .data?
 hMapFile  DWORD ?
-hSessID   DWORD ?
 pMapData  DWORD ?
-dRetries  DWORD ?    
+    
